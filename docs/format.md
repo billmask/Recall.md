@@ -44,3 +44,7 @@ A associação inicial usa o caminho relativo exato abaixo das duas raízes fixa
 ## Gravação
 
 Mutações do Recall usam um lock local `recall/.write-lock` e troca atômica do arquivo da unidade. Eventos usam nomes UUID e criação exclusiva. Interrupção forçada pode deixar o lock: só o remova manualmente após confirmar que não há uma operação de gravação ativa. Edição externa não participa desse lock. A edição web envia a versão lida para detectar conflito com alteração de conteúdo; uma falha de vínculo não desfaz a etapa já salva, e pode ser resolvida com `recall sync`.
+
+## TUI
+
+A interface de terminal usa o mesmo formato de arquivos e Store das demais interfaces. Não persiste seleção de tela, rascunho de formulário nem respostas de quiz antes do envio completo; Esc descarta apenas o rascunho. Tentativas e revisões já enviadas seguem imutáveis. Comparação de versão impede envio de quiz ou avaliação de cartão contra conteúdo alterado durante a sessão.

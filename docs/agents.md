@@ -1,6 +1,6 @@
 # Recall.md — contrato para agentes
 
-Use `recall --help`, `recall unit list --json` e `recall unit view ID` antes de alterar material. CLI e web têm a mesma semântica; não invente notas ou respostas em nome do estudante.
+Use `recall --help`, `recall unit list --json` e `recall unit view ID` antes de alterar material. CLI, TUI e web têm a mesma semântica; não invente notas ou respostas em nome do estudante.
 
 ## Gerar um percurso de aprendizagem
 
@@ -26,3 +26,7 @@ Para vincular ao Backlog.md, `file` deve ser o caminho relativo do arquivo da ta
 ## Prática e histórico
 
 `recall quiz ID` entrega questões sem gabarito; `recall answer ID --answers arquivo.json` registra uma tentativa com as respostas realmente fornecidas pelo usuário. `recall assess ID-TENTATIVA --question ID --correct true|false` registra autoavaliação posterior. `recall card from-question ID --question ID` usa o gabarito atual, não a resposta do estudante. `recall review --due` e `recall review ID --card ID --rating ...` permitem revisar pelo terminal. Preservar tentativas e revisões anteriores é obrigatório.
+
+## Interface interativa
+
+`recall tui` abre a interface humana no terminal. Ela usa Store e os mesmos arquivos. Para automação, continue usando os comandos estruturados; a TUI exige TTY e não aceita --json. Atalhos e comportamento de cancelamento estão no README. Não simule respostas ou avaliações pessoais pela TUI em nome do estudante sem fonte explícita.

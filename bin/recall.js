@@ -4,6 +4,7 @@ import { parseArgs } from 'node:util';
 import { Store, STATUSES, ensure } from '../src/core.js';
 import { backlogContext, synchronize, autoLink } from '../src/backlog.js';
 import { serve } from '../src/server.js';
+import { startTui } from '../src/tui.js';
 const usage = `Recall.md • aprendizagem em etapas
 
 recall init                                  Inicializa recall/ no diretório atual
@@ -20,6 +21,7 @@ recall review [--deck "Deck"] [--due]         Lista cartões para revisão
 recall review RCL-1 --card ID --rating again|hard|good|easy
 recall sync [RCL-1]                           Detecta simetria e cria links nos dois sentidos
 recall context RCL-1                          Mostra contexto atual da tarefa vinculada
+recall tui                                   Abre interface interativa de terminal
 recall browser [--port 6421]                  Inicia interface web local
 recall instructions                          Contrato para agentes
 
@@ -58,6 +60,10 @@ try {
   else if (a[0] === 'review') output(a[1] ? store.review(a[1], o.card, o.rating) : store.reviewQueue({ deck: o.deck, due: o.due }));
   else if (a[0] === 'context') output(backlogContext(store, a[1]));
   else if (a[0] === 'sync') output((a[1] ? [store.get(a[1])] : store.list()).map(u => ({ unit: u.id, ...synchronize(store, u.id) })));
+  else if (a[0] === 'tui') {
+    ensure(!o.json, 'TUI não suporta --json. Use recall unit list --json para automação.');
+    await startTui(store);
+  }
   else if (a[0] === 'browser') {
     const port = Number(o.port || 6421); ensure(Number.isInteger(port) && port >= 0 && port <= 65535, 'Porta inválida.');
     store.config();

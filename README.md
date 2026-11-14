@@ -1,6 +1,6 @@
 # Recall.md
 
-Aprendizagem em etapas, com arquivos Markdown, kanban, quizzes e flashcards. CLI e interface web operam sobre o mesmo diretório `recall/`. Funciona sem Backlog.md; quando existe uma tarefa correspondente, reconhece o vínculo e apresenta seu contexto.
+Aprendizagem em etapas, com arquivos Markdown, kanban, quizzes e flashcards. CLI, TUI e interface web operam sobre o mesmo diretório `recall/`. Funciona sem Backlog.md; quando existe uma tarefa correspondente, reconhece o vínculo e apresenta seu contexto.
 
 ## Começar
 
@@ -36,13 +36,49 @@ O exemplo é sintético, não é histórico pessoal de estudo. O código do prod
 ## Fluxo
 
 1. Crie uma etapa, descreva seu objetivo e escolha um deck.
-2. Adicione material, questões de múltipla escolha ou texto livre, e cartões. A web tem formulários; agentes podem importar JSON pela CLI.
+2. Adicione material, questões de múltipla escolha ou texto livre, e cartões. Web e TUI têm formulários; agentes podem importar JSON pela CLI.
 3. Organize o kanban por arrastar e soltar ou pelo estado no formulário de edição.
 4. Responda ao quiz. A tentativa registra as respostas e uma cópia da referência daquela versão. Múltipla escolha tem correção automática; texto livre mostra a referência e permite autoavaliação explícita.
 5. Crie flashcards manualmente ou a partir do **gabarito atual** de uma questão. Uma resposta incorreta não vira gabarito.
 6. Revise por deck: tente lembrar, revele o verso e avalie a recordação. Cada revisão é preservada.
 
 Estados iniciais: **A estudar → Estudando → Praticando → Em revisão → Concluído**. São organização do trabalho, não demonstração de domínio; esta versão não exige nota mínima para mudar de coluna.
+
+## TUI — terminal interativo
+
+```bash
+recall tui
+# Sem instalação global:
+node /caminho/Recall.md/bin/recall.js --cwd /pasta/de/estudo tui
+```
+
+Inicie com `recall init` se a pasta ainda não tiver um espaço de estudo. A TUI usa os mesmos arquivos e regras da CLI e da web. Requer terminal interativo de pelo menos **50 colunas × 14 linhas**; em terminais menores, redimensione ou use Ctrl+C para sair. Não aceita `--json`; scripts devem usar os comandos CLI existentes.
+
+O quadro mostra colunas por estado, seleção destacada e rolagem de etapas. Em janelas estreitas, mostra apenas as colunas ao redor da seleção; use ←/→ para alcançar as demais. Tab alterna quadro e lista. A interação se inspira nos atalhos do Backlog.md, com implementação própria em Node.js/readline e sem dependência de sua TUI.
+
+| Onde | Teclas | Ação |
+|---|---|---|
+| Quadro/lista | Setas ou `h/j/k/l`, Enter | Navegar e abrir etapa |
+| Quadro/lista | Tab, `/`, `d` | Alternar quadro/lista, buscar, filtrar deck |
+| Quadro/lista | `n`, `e`, `m`, `r` | Criar, editar, mover estado, revisar decks |
+| Detalhes | `q`, `a`, `f`, `r`, `t`, `s` | Quiz, nova questão, novo cartão, revisão do deck, tentativas, vínculos |
+| Formulário | Tab/Enter, Shift+Tab | Próximo campo, campo anterior |
+| Formulário | Ctrl+J, Ctrl+U, Backspace | Nova linha, limpar campo, apagar no final |
+| Formulário | Ctrl+S, Esc | Salvar, cancelar |
+| Quiz de alternativas | ↑/↓ ou 1–9, Enter | Selecionar e confirmar |
+| Quiz de texto | Digitar, Ctrl+J, Enter | Responder, nova linha, confirmar |
+| Resultado | ←/→, Enter, `f` | Percorrer, continuar, criar cartão do gabarito atual |
+| Resultado de texto | `1`, `2` | Autoavaliar como correto ou retomar |
+| Revisão | Espaço/Enter, depois `1`–`4` | Revelar; repetir, difícil, lembrei ou fácil |
+| Material/contexto | ↑/↓ ou `j/k`, PgUp/PgDn, Home/End | Rolar |
+| Quadro/lista ou detalhes | Ctrl+R | Reler arquivos alterados externamente |
+| Navegação | `?`, Esc, Ctrl+C | Ajuda, voltar/cancelar, encerrar |
+
+Na tela principal, `q` também encerra. Nos detalhes, `q` inicia o quiz. Em campos de texto, letras continuam sendo texto, não atalhos. Enter confirma a resposta e avança; a tentativa só é gravada ao enviar a última questão. Esc cancela respostas ainda não enviadas. Se o material mudar enquanto você responde, reinicie o quiz para não misturar versões.
+
+A revisão exige revelar o verso antes de registrar uma avaliação. Encerrar uma sessão conserva as revisões já gravadas. O resultado permite criar flashcard do gabarito **atual**; a referência da tentativa histórica permanece intacta. O contexto da tarefa vinculada aparece ao final dos detalhes; `s` tenta atualizar os vínculos pela CLI oficial do Backlog.md. Ao criar/editar na TUI, a associação é tentada automaticamente, como nas outras interfaces.
+
+Não há banco paralelo nem dependência nova para a TUI. O modo de entrada, cursor e tela anterior são restaurados ao sair normalmente, por Ctrl+C/SIGTERM/SIGHUP ou por erro capturado. Como em qualquer aplicação, encerramento forçado com SIGKILL não permite limpeza.
 
 ## CLI
 
@@ -130,6 +166,6 @@ npm test
 RECALL_BACKLOG_BIN=/caminho/do/backlog npm test
 ```
 
-Testes incluem dois ensaios DOM dos formulários, quiz, autoavaliação e revisão da web, além de persistência, histórico, conflitos, CLI, HTTP e integração idempotente com a CLI real do Backlog.md quando fornecida. O servidor escuta somente em `127.0.0.1`; não há autenticação para acesso remoto. A revisão visual/interativa está pendente porque não havia navegador disponível no ambiente de implementação.
+Testes incluem controlador da TUI e um ensaio em pseudo-terminal POSIX real (requer Python 3) com redimensionamento, navegação, formulário, quiz, revisão, Ctrl+C/SIGTERM e restauração dos atributos do terminal, além de dois ensaios DOM dos formulários, quiz, autoavaliação e revisão da web, além de persistência, histórico, conflitos, CLI, HTTP e integração idempotente com a CLI real do Backlog.md quando fornecida. O servidor escuta somente em `127.0.0.1`; não há autenticação para acesso remoto. A revisão visual/interativa está pendente porque não havia navegador disponível no ambiente de implementação.
 
 Referência de produto: [Backlog.md](https://github.com/MrLesk/Backlog.md). Recall.md é uma implementação independente, sem importar seus módulos internos.
