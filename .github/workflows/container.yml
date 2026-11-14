@@ -1,0 +1,64 @@
+name: Container
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: container-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/gmrodrigues/recall.md
+
+jobs:
+  test-build-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Install
+        run: npm ci --ignore-scripts
+      - name: Check and test
+        run: |
+          npm run check
+          npm test
+      - name: Build exact revision
+        run: docker build --build-arg VCS_REF="$GITHUB_SHA" -t "$IMAGE:sha-$GITHUB_SHA" .
+      - name: Smoke CLI, TUI and web in container
+        run: npm run test:container -- "$IMAGE:sha-$GITHUB_SHA"
+      - name: Login to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish tested image
+        if: github.event_name != 'pull_request'
+        run: |
+          docker tag "$IMAGE:sha-$GITHUB_SHA" "$IMAGE:latest"
+          docker push "$IMAGE:sha-$GITHUB_SHA"
+          docker push "$IMAGE:latest"
+          digest=$(docker image inspect --format '{{index .RepoDigests 0}}' "$IMAGE:sha-$GITHUB_SHA")
+          {
+            echo "## Recall.md container"
+            echo "- Revision: $GITHUB_SHA"
+            echo "- Image: $IMAGE:latest"
+            echo "- Immutable tag: $IMAGE:sha-$GITHUB_SHA"
+            echo "- Digest: $digest"
+            echo "- CLI, TUI/PTTY, HTTP and persistence smoke: passed"
+          } >> "$GITHUB_STEP_SUMMARY"

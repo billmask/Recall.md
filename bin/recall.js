@@ -22,7 +22,7 @@ recall review RCL-1 --card ID --rating again|hard|good|easy
 recall sync [RCL-1]                           Detecta simetria e cria links nos dois sentidos
 recall context RCL-1                          Mostra contexto atual da tarefa vinculada
 recall tui                                   Abre interface interativa de terminal
-recall browser [--port 6421]                  Inicia interface web local
+recall browser [--port 6421] [--host 127.0.0.1]                  Inicia interface web local
 recall instructions                          Contrato para agentes
 
 Opções globais: --cwd DIRETÓRIO, --json, --help
@@ -33,7 +33,7 @@ try {
     cwd: { type: 'string' }, json: { type: 'boolean' }, help: { type: 'boolean', short: 'h' },
     title: { type: 'string' }, description: { type: 'string' }, deck: { type: 'string' }, file: { type: 'string' },
     status: { type: 'string' }, id: { type: 'string' }, answers: { type: 'string' }, question: { type: 'string' },
-    correct: { type: 'string' }, card: { type: 'string' }, rating: { type: 'string' }, due: { type: 'boolean' }, port: { type: 'string' }
+    correct: { type: 'string' }, card: { type: 'string' }, rating: { type: 'string' }, due: { type: 'boolean' }, port: { type: 'string' }, host: { type: 'string' }
   } });
   if (o.help || !a.length) { console.log(usage); process.exit(0); }
   const store = new Store(o.cwd);
@@ -68,7 +68,7 @@ try {
     const port = Number(o.port || 6421); ensure(Number.isInteger(port) && port >= 0 && port <= 65535, 'Porta inválida.');
     store.config();
     for (const unit of store.list()) { const result = autoLink(store, unit); if (result.warning) console.error(result.warning); }
-    const server = await serve(store, port);
+    const server = await serve(store, port, o.host || '127.0.0.1');
     console.log(`Recall.md: http://127.0.0.1:${server.address().port}\nProjeto: ${store.cwd}\nCtrl+C para encerrar.`);
     for (const signal of ['SIGTERM', 'SIGINT']) process.on(signal, () => server.close(() => process.exit(0)));
   } else { console.error(usage); process.exitCode = 1; }

@@ -1,0 +1,14 @@
+**
+!Dockerfile
+!package.json
+!package-lock.json
+!bin/
+!bin/**
+!src/
+!src/**
+!web/
+!web/**
+!docs/
+!docs/agents.md
+!examples/
+!examples/**

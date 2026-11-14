@@ -44,6 +44,59 @@ O exemplo é sintético, não é histórico pessoal de estudo. O código do prod
 
 Estados iniciais: **A estudar → Estudando → Praticando → Em revisão → Concluído**. São organização do trabalho, não demonstração de domínio; esta versão não exige nota mínima para mudar de coluna.
 
+## Docker / GHCR
+
+Imagem: `ghcr.io/gmrodrigues/recall.md:latest`. Cada publicação também recebe `sha-<SHA completo do commit>`, e o digest permite selecionar exatamente o artefato publicado. A primeira versão da imagem é Linux/amd64.
+
+Na pasta de estudo, inicialize os arquivos uma vez:
+
+```bash
+docker pull ghcr.io/gmrodrigues/recall.md:latest
+docker run --rm --user "$(id -u):$(id -g)" \
+  --mount "type=bind,source=$PWD,target=/workspace" \
+  ghcr.io/gmrodrigues/recall.md:latest init
+```
+
+Abra a web:
+
+```bash
+docker run --rm --name recall --user "$(id -u):$(id -g)" \
+  --mount "type=bind,source=$PWD,target=/workspace" \
+  -p 127.0.0.1:6421:6421 \
+  ghcr.io/gmrodrigues/recall.md:latest
+```
+
+Acesse **http://127.0.0.1:6421**. O comando padrão é `browser --host 0.0.0.0`: a aplicação escuta nas interfaces do contêiner e a porta é publicada apenas no localhost da máquina. O padrão fora do Docker continua sendo `127.0.0.1`. Outra porta local, como `-p 127.0.0.1:6422:6421`, também funciona. Ctrl+C encerra a web; os arquivos permanecem na pasta montada.
+
+Para CLI e TUI:
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" \
+  --mount "type=bind,source=$PWD,target=/workspace" \
+  ghcr.io/gmrodrigues/recall.md:latest unit list
+
+docker run --rm -it --user "$(id -u):$(id -g)" \
+  --mount "type=bind,source=$PWD,target=/workspace" \
+  ghcr.io/gmrodrigues/recall.md:latest tui
+```
+
+Os exemplos de UID/GID usam shell POSIX. A imagem usa o usuário `node` por padrão; `--user` permite gravar no diretório montado com a identidade do usuário local. O material não fica embutido na imagem. Monte a pasta que deve guardar `recall/`; sem essa montagem, arquivos criados no contêiner são efêmeros. Para projetos com Backlog.md, monte a pasta que contém as duas raízes. O contexto da tarefa pode ser lido, mas a imagem não inclui a CLI do Backlog.md para criar o link de retorno; essa integração requer um executável configurado disponível no ambiente.
+
+O serviço continua sem autenticação: os comandos acima publicam a porta somente no localhost. A distribuição da imagem não hospeda uma instância pública da aplicação.
+
+### Build e publicação
+
+```bash
+docker build --build-arg VCS_REF="$(git rev-parse HEAD)" -t recall-md:local .
+npm run test:container -- recall-md:local
+```
+
+O Dockerfile fixa a base oficial Node.js por digest, instala apenas dependências de produção e copia uma lista explícita de arquivos. `.dockerignore` exclui os dados locais, Git, credenciais e dependências da máquina por padrão.
+
+O workflow **Container** executa checagens, testes, build e smoke real de CLI/TUI/web antes de publicar no GHCR. Publica em push de `main` ou disparo manual; pull requests testam sem publicar. Usa `GITHUB_TOKEN` com `packages: write`, sem secret adicional. A imagem testada é a que recebe as tags de SHA e `latest`. Actions são fixadas por SHA. O smoke usa pasta temporária, valida persistência e rejeição de Host/Origin inválidos, e percorre a TUI por pseudo-terminal (Python 3).
+
+Na primeira publicação, confira a visibilidade em **Packages → recall.md → Package settings → Change visibility → Public**. A visibilidade do pacote é independente da do repositório. O acesso público só está demonstrado depois de um pull sem credenciais.
+
 ## TUI — terminal interativo
 
 ```bash
@@ -166,6 +219,6 @@ npm test
 RECALL_BACKLOG_BIN=/caminho/do/backlog npm test
 ```
 
-Testes incluem controlador da TUI e um ensaio em pseudo-terminal POSIX real (requer Python 3) com redimensionamento, navegação, formulário, quiz, revisão, Ctrl+C/SIGTERM e restauração dos atributos do terminal, além de dois ensaios DOM dos formulários, quiz, autoavaliação e revisão da web, além de persistência, histórico, conflitos, CLI, HTTP e integração idempotente com a CLI real do Backlog.md quando fornecida. O servidor escuta somente em `127.0.0.1`; não há autenticação para acesso remoto. A revisão visual/interativa está pendente porque não havia navegador disponível no ambiente de implementação.
+Testes incluem controlador da TUI e um ensaio em pseudo-terminal POSIX real (requer Python 3) com redimensionamento, navegação, formulário, quiz, revisão, Ctrl+C/SIGTERM e restauração dos atributos do terminal, além de dois ensaios DOM dos formulários, quiz, autoavaliação e revisão da web, além de persistência, histórico, conflitos, CLI, HTTP e integração idempotente com a CLI real do Backlog.md quando fornecida. O servidor escuta por padrão em `127.0.0.1`; `--host 0.0.0.0` é uma opção explícita para o contêiner, cuja porta deve ser publicada no localhost. Não há autenticação para acesso remoto. A revisão visual/interativa está pendente porque não havia navegador disponível no ambiente de implementação.
 
 Referência de produto: [Backlog.md](https://github.com/MrLesk/Backlog.md). Recall.md é uma implementação independente, sem importar seus módulos internos.

@@ -13,7 +13,8 @@
   "scripts": {
     "start": "node bin/recall.js browser",
     "test": "node --test test/*.test.js",
-    "check": "node --check src/core.js && node --check src/backlog.js && node --check src/server.js && node --check bin/recall.js && node --check web/app.js && node --check src/tui.js && node --check src/terminal.js"
+    "check": "node --check src/core.js && node --check src/backlog.js && node --check src/server.js && node --check bin/recall.js && node --check web/app.js && node --check src/tui.js && node --check src/terminal.js",
+    "test:container": "node scripts/smoke-container.mjs"
   },
   "dependencies": {
     "yaml": "2.9.0"

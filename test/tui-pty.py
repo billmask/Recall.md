@@ -9,18 +9,22 @@ import subprocess
 import sys
 import termios
 import time
+import uuid
 
-cli, cwd, node = sys.argv[1:]
+cli, cwd, node, *extra = sys.argv[1:]
+image = extra[0] if extra else None
 
 def session(mode):
     master, slave = pty.openpty()
     fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack('HHHH', 32, 110, 0, 0))
     original = termios.tcgetattr(slave)
-    process = subprocess.Popen([node, cli, '--cwd', cwd, 'tui'], stdin=slave, stdout=slave, stderr=slave, start_new_session=True)
+    container_name = 'recall-pty-' + uuid.uuid4().hex[:12]
+    command = (['docker', 'run', '--name', container_name, '--rm', '-it', '--user', '%s:%s' % (os.getuid(), os.getgid()), '--mount', 'type=bind,source=%s,target=/workspace' % cwd, image, 'tui'] if image else [node, cli, '--cwd', cwd, 'tui'])
+    process = subprocess.Popen(command, stdin=slave, stdout=slave, stderr=slave, start_new_session=True)
     transcript = bytearray()
     offset = 0
 
-    def wait_for(value, timeout=4):
+    def wait_for(value, timeout=12):
         target = value.encode()
         deadline = time.monotonic() + timeout
         while target not in transcript[offset:]:
@@ -78,7 +82,7 @@ def session(mode):
             send(b'\x03')
         else:
             os.kill(process.pid, signal.SIGTERM)
-        process.wait(timeout=4)
+        process.wait(timeout=12)
         # Drain the final restore sequence.
         while select.select([master], [], [], 0.1)[0]:
             transcript.extend(os.read(master, 65536))
@@ -92,9 +96,11 @@ def session(mode):
         if process.poll() is None:
             process.kill()
             process.wait()
+        if image:
+            subprocess.run(['docker', 'rm', '-f', container_name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         os.close(master)
         os.close(slave)
 
-for mode in ['flow', 'interrupt', 'signal']:
+for mode in (['flow', 'interrupt'] if image else ['flow', 'interrupt', 'signal']):
     session(mode)
     print('PTY %s: navigation/exit and terminal restoration verified' % mode)

@@ -30,3 +30,11 @@ Glauber solicitou commit e push nos repositórios Recall.md e gmr-planning. Mesm
 ## 14/11/2026 — publicação da TUI, SOL-17
 
 Glauber solicitou commit e push após concluir a TUI. Mesma sessão Codex registrada acima. Escopo: TUI, integração à CLI, testes e documentação; dados locais em recall/ ficam fora do commit. Destino autorizado: gmrodrigues/Recall.md, main. Planejamento e GMR-27 publicados separadamente no gmr-planning. A validação final da implementação já passou com 21 testes e check, sem mudança posterior de código.
+
+## 14/11/2026 — imagem Docker, GMR-28
+
+- Codex, sessão 01a1dbc7-9b7c-7631-a2aa-5a45f080acdf; origem CODEX_THREAD_ID/CODEX_SESSION_ID.
+- SOL-20261114-ESTUDO-19 autoriza Dockerfile, workflow e publicação GHCR.
+- Card local GMR-28, projeto Recall.md; relação de acompanhamento em docs/repositorios-externos.json do gmr-planning.
+- Dockerfile com base oficial fixada por digest, usuário não root e contexto em allowlist. Escuta 0.0.0.0 só por opção explícita; portas publicadas no localhost.
+- Build e testes usam dados sintéticos temporários, não o diretório local recall/.

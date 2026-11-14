@@ -12,7 +12,8 @@ export function createServer(store) {
     res.setHeader('Cache-Control', 'no-store');
     const json = (data, status = 200) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(data)); };
     try {
-      ensure(req.headers.host === `127.0.0.1:${res.socket.localPort}` || req.headers.host === `localhost:${res.socket.localPort}`, 'Host inválido.', 403);
+      const host = /^(localhost|127\.0\.0\.1)(?::([1-9]\d{0,4}))?$/.exec(req.headers.host || '');
+      ensure(host && (!host[2] || Number(host[2]) <= 65535), 'Host inválido.', 403);
       const url = new URL(req.url, `http://${req.headers.host}`);
       const parts = url.pathname.split('/').filter(Boolean).map(decodeURIComponent);
       if (req.method === 'GET' && !url.pathname.startsWith('/api/')) {
@@ -52,8 +53,9 @@ export function createServer(store) {
     } catch (e) { json({ error: e instanceof RecallError ? e.message : 'Falha ao ler ou gravar os dados. Verifique os arquivos do projeto.' }, e.status || 500); }
   });
 }
-export async function serve(store, port = 6421) {
+export async function serve(store, port = 6421, host = '127.0.0.1') {
+  ensure(['127.0.0.1', '0.0.0.0'].includes(host), 'Host de escuta: 127.0.0.1 ou 0.0.0.0.');
   const server = createServer(store);
-  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, '127.0.0.1', resolve); });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(port, host, resolve); });
   return server;
 }
