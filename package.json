@@ -1,0 +1,24 @@
+{
+  "name": "recall-md",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Aprendizagem em etapas com Markdown, quizzes e flashcards",
+  "type": "module",
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  },
+  "bin": {
+    "recall": "bin/recall.js"
+  },
+  "scripts": {
+    "start": "node bin/recall.js browser",
+    "test": "node --test test/*.test.js",
+    "check": "node --check src/core.js && node --check src/backlog.js && node --check src/server.js && node --check bin/recall.js && node --check web/app.js"
+  },
+  "dependencies": {
+    "yaml": "2.9.0"
+  },
+  "devDependencies": {
+    "jsdom": "31.0.1"
+  }
+}

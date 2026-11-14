@@ -1,0 +1,14 @@
+{
+  "title": "Entender o percurso de uma requisição",
+  "deck": "Arquitetura · exemplo sintético",
+  "description": "Exercício sintético para experimentar Recall.md.\n\nNeste exemplo, um adaptador recebe uma requisição e chama um caso de uso. O caso de uso aplica uma regra de domínio e solicita persistência por uma porta.\n\nEtapas:\n1. Identificar a entrada.\n2. Explicar a regra de domínio.\n3. Distinguir regra e persistência.\n\nEste texto é material didático inventado; não descreve um repositório real.",
+  "sources": ["Material sintético contido na descrição desta unidade"],
+  "questions": [
+    {"id": "entrada", "type": "choice", "prompt": "No exemplo, quem recebe a requisição e chama o caso de uso?", "options": ["O adaptador de entrada", "A camada de persistência", "O flashcard"], "answer": 0, "explanation": "O material atribui ao adaptador o papel de receber e traduzir a entrada.", "source": "Descrição desta unidade — exemplo sintético"},
+    {"id": "fluxo", "type": "text", "prompt": "Explique com suas palavras a diferença entre aplicar uma regra e persistir seu resultado.", "answer": "Aplicar a regra decide o comportamento do domínio; persistir guarda o resultado. No exemplo, o caso de uso aplica a regra e solicita persistência por uma porta.", "explanation": "Compare a separação de responsabilidades, não a redação exata.", "source": "Descrição desta unidade — exemplo sintético"}
+  ],
+  "cards": [
+    {"id": "regra-persistencia", "front": "No exemplo, qual é a diferença entre regra de domínio e persistência?", "back": "A regra decide o comportamento; a persistência guarda o resultado.", "source": "Descrição desta unidade — exemplo sintético"},
+    {"id": "entrada-papel", "front": "No exemplo, qual é o papel do adaptador de entrada?", "back": "Receber a requisição e chamar o caso de uso.", "source": "Descrição desta unidade — exemplo sintético"}
+  ]
+}

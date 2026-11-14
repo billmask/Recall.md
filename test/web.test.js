@@ -1,0 +1,77 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { JSDOM } from 'jsdom';
+import { Store } from '../src/core.js';
+import { serve } from '../src/server.js';
+
+test('Web DOM: criar etapa, adicionar quiz, responder errado, criar cartão e revisar deck', async t => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'recall-web-'));
+  const store = new Store(cwd); store.init();
+  const server = await serve(store, 0);
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const html = fs.readFileSync(new URL('../web/index.html', import.meta.url), 'utf8');
+  const dom = new JSDOM(html, { url: base, runScripts: 'outside-only', pretendToBeVisual: true });
+  const w = dom.window;
+  w.fetch = (url, opts) => fetch(base + url, opts);
+  w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  w.HTMLDialogElement.prototype.close = function () { this.open = false; this.dispatchEvent(new w.Event('close')); };
+  t.after(async () => { w.close(); await new Promise(r => server.close(r)); fs.rmSync(cwd, { recursive: true, force: true }); });
+  const script = fs.readFileSync(new URL('../web/app.js', import.meta.url), 'utf8');
+  await w.eval(`(async () => { ${script}\n})()`);
+  const $ = s => w.document.querySelector(s);
+  const until = async predicate => {
+    const start = Date.now(); while (!predicate()) { if (Date.now() - start > 4000) throw new Error('Tempo esgotado no fluxo DOM. Toast: ' + $('#toast').textContent); await new Promise(r => setTimeout(r, 10)); }
+  };
+  const submit = form => $(form).dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true }));
+  assert.match($('#view').textContent, /O que você quer entender/);
+  $('[data-action="create"]').click();
+  $('#edit-form').elements.title.value = 'Entender o fluxo'; $('#edit-form').elements.deck.value = 'Meu estudo';
+  $('#edit-form').elements.description.value = 'Adaptador recebe a entrada.'; submit('#edit-form');
+  await until(() => $('.study-card'));
+  $('.study-card').click(); await until(() => $('[data-tab="quiz"]'));
+  $('[data-tab="quiz"]').click(); $('[data-action="add-question"]').click();
+  const form = $('#material-form'); form.elements.prompt.value = 'Quem recebe a entrada?';
+  form.elements.options.value = 'Adaptador\nBanco'; form.elements.choiceAnswer.value = '1'; submit('#material-form');
+  await until(() => $('#quiz-form'));
+  $('#quiz-form input[value="1"]').checked = true; submit('#quiz-form');
+  await until(() => $('#quiz-feedback .result'));
+  assert.ok($('#quiz-feedback .wrong')); assert.match($('#quiz-feedback').textContent, /Referência: Adaptador/);
+  $('#quiz-feedback [data-from-question]').click(); await until(() => $('#due-count').textContent === '1');
+  assert.equal(store.reviewQueue()[0].back, 'Adaptador');
+  $('#detail').close(); $('[data-page="review"]').click();
+  $('[data-review-deck]').click(); assert.ok($('#card-back').hidden);
+  $('#reveal').click(); assert.equal($('#card-back').hidden, false); assert.equal($('#card-back').textContent, 'Adaptador');
+  $('[data-rating="good"]').click(); await until(() => $('#view').textContent.includes('Revisão em dia'));
+  assert.equal(store.events('reviews').length, 1); assert.equal(store.events('attempts')[0].results[0].correct, false);
+});
+
+test('Web DOM: contexto da tarefa, quiz de texto e autoavaliação preservam a tentativa', async t => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'recall-web-context-'));
+  const store = new Store(cwd); store.init();
+  const unit = store.save({ title: 'Explicar regra', file: 'back-1.md', deck: 'Domínio', questions: [{ id: 'regra', type: 'text', prompt: 'Explique a regra.', answer: 'A regra decide o comportamento.' }] });
+  fs.mkdirSync(path.join(cwd, 'backlog/tasks'), { recursive: true });
+  fs.writeFileSync(path.join(cwd, 'backlog/tasks/back-1.md'), '---\nid: BACK-1\ntitle: Implementar regra\nstatus: In Progress\nreferences: [recall/tasks/back-1.md]\n---\n\n## Description\n\n<!-- SECTION:DESCRIPTION:BEGIN -->\nContexto da tarefa de origem\n<!-- SECTION:DESCRIPTION:END -->\n');
+  const server = await serve(store, 0), base = `http://127.0.0.1:${server.address().port}`;
+  const dom = new JSDOM(fs.readFileSync(new URL('../web/index.html', import.meta.url), 'utf8'), { url: base, runScripts: 'outside-only' });
+  const w = dom.window; w.fetch = (url, opts) => fetch(base + url, opts);
+  w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  w.HTMLDialogElement.prototype.close = function () { this.open = false; this.dispatchEvent(new w.Event('close')); };
+  t.after(async () => { w.close(); await new Promise(r => server.close(r)); fs.rmSync(cwd, { recursive: true, force: true }); });
+  await w.eval(`(async () => { ${fs.readFileSync(new URL('../web/app.js', import.meta.url), 'utf8')}\n})()`);
+  const $ = s => w.document.querySelector(s);
+  const until = async p => { const start = Date.now(); while (!p()) { if (Date.now() - start > 4000) throw new Error('Tempo esgotado: ' + $('#toast').textContent); await new Promise(r => setTimeout(r, 10)); } };
+  $('.study-card').click(); await until(() => $('.detail-aside'));
+  assert.match($('.detail-aside').textContent, /Contexto da tarefa de origem/);
+  assert.match($('.detail-aside').textContent, /Implementar regra/);
+  $('[data-tab="quiz"]').click(); $('#quiz-form textarea').value = 'Minha explicação';
+  $('#quiz-form').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true }));
+  await until(() => $('[data-assess]'));
+  assert.match($('#quiz-feedback').textContent, /A regra decide o comportamento/);
+  $('[data-assess][data-correct="false"]').click(); await until(() => store.events('assessments').length === 1);
+  assert.equal(store.events('attempts', unit.id)[0].results[0].answer, 'Minha explicação');
+  assert.equal(store.events('attempts', unit.id)[0].results[0].correct, null);
+  assert.equal(store.events('assessments')[0].correct, false);
+});
