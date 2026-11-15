@@ -44,9 +44,76 @@ O exemplo é sintético, não é histórico pessoal de estudo. O código do prod
 
 Estados iniciais: **A estudar → Estudando → Praticando → Em revisão → Concluído**. São organização do trabalho, não demonstração de domínio; esta versão não exige nota mínima para mudar de coluna.
 
+## Instalar `recall.md` com Docker
+
+Requer Docker instalado e acessível ao usuário, Bash e curl. Funciona em Linux/macOS; no Windows, use WSL com integração Docker. Não requer clonar o repositório nem instalar Node.js:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gmrodrigues/Recall.md/main/install.sh | bash
+```
+
+O instalador baixa a imagem pública `ghcr.io/gmrodrigues/recall.md:latest` e cria `~/.local/bin/recall.md`, sem sudo. Se essa pasta ainda não estiver no PATH, adicione ao arquivo de configuração do shell:
+
+```bash
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Na pasta que deve guardar o estudo, use todos os comandos da CLI através de `recall.md`:
+
+```bash
+recall.md init
+recall.md unit create --title "Entender o projeto" --deck "Arquitetura"
+recall.md unit list
+recall.md quiz RCL-1
+recall.md review
+recall.md tui
+recall.md browser
+# Outra porta local:
+recall.md browser --port 6422
+# Ajuda com os demais comandos, quizzes, importação e flashcards:
+recall.md --help
+```
+
+A web fica em `http://127.0.0.1:6421` (ou na porta escolhida), publicada somente no localhost. Ctrl+C encerra o contêiner. O launcher monta a pasta atual, preserva os arquivos `recall/` e usa seu UID/GID; TTY é ativado apenas quando entrada e saída são terminais. Execute a partir da pasta que contém os dados e os arquivos a importar; caminhos fora dessa pasta não ficam disponíveis no contêiner. Para estudar outro projeto, mude de diretório antes de executar `recall.md`.
+
+### Atualizar
+
+```bash
+recall.md update
+```
+
+Atualiza a imagem Docker selecionada, sem alterar os materiais, respostas ou revisões. As próximas execuções usam a imagem baixada; reinicie uma web/TUI já aberta para usar a nova versão. Para atualizar também o launcher, execute novamente o comando de instalação. Ele preserva comandos existentes que não tenham sido criados por este instalador.
+
+Para selecionar outra imagem na execução ou atualização:
+
+```bash
+RECALL_IMAGE=ghcr.io/gmrodrigues/recall.md:sha-<commit> recall.md unit list
+RECALL_IMAGE=ghcr.io/gmrodrigues/recall.md:sha-<commit> recall.md update
+```
+
+### Diretório personalizado e remoção
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/gmrodrigues/Recall.md/main/install.sh | bash -s -- --bin-dir "$HOME/bin"
+# Remover o launcher padrão, preservando os dados dos estudos:
+rm "$HOME/.local/bin/recall.md"
+```
+
+Em uma cópia local, `sh install.sh` faz a mesma instalação. O comando usa as mesmas limitações da imagem descritas abaixo, incluindo a integração opcional com Backlog.md. Para validar o instalador em diretórios temporários com Docker real: `python3 scripts/smoke-install-docker.py` (requer Python 3). O ensaio cobre pipe, instalação/reinstalação, atualização, CLI, argumentos, persistência, TUI em PTY, web local e proteção de comandos existentes.
+
 ## Docker / GHCR
 
-Imagem: `ghcr.io/gmrodrigues/recall.md:latest`. Cada publicação também recebe `sha-<SHA completo do commit>`, e o digest permite selecionar exatamente o artefato publicado. A primeira versão da imagem é Linux/amd64.
+Imagem pública no **GitHub Container Registry (GHCR)**: [`ghcr.io/gmrodrigues/recall.md:latest`](https://github.com/gmrodrigues/Recall.md/pkgs/container/recall.md).
+
+Publicação inicial verificada em **14/11/2026**, com download sem credenciais:
+
+| Referência | Endereço |
+| --- | --- |
+| Versão mais recente | `ghcr.io/gmrodrigues/recall.md:latest` |
+| Tag da entrega inicial | `ghcr.io/gmrodrigues/recall.md:sha-4917012a5818a6f1175efef146851cc63a97756c` |
+| Artefato imutável da entrega inicial | `ghcr.io/gmrodrigues/recall.md@sha256:c5e18d193efad447a3757efee608734d9714fcf430aa129e7028f71bf6304825` |
+
+[Workflow da publicação inicial](https://github.com/gmrodrigues/Recall.md/actions/runs/43653578247). A tag `latest` acompanha novas publicações; use o digest acima para reproduzir exatamente esta entrega. Cada publicação também recebe `sha-<SHA completo do commit>`. A primeira versão da imagem é Linux/amd64.
 
 Na pasta de estudo, inicialize os arquivos uma vez:
 
