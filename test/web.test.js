@@ -75,3 +75,77 @@ test('Web DOM: contexto da tarefa, quiz de texto e autoavaliação preservam a t
   assert.equal(store.events('attempts', unit.id)[0].results[0].correct, null);
   assert.equal(store.events('assessments')[0].correct, false);
 });
+
+test('Web DOM: tentativa, correção e estado sobrevivem a reabrir a página', async t => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'recall-web-reload-'));
+  const store = new Store(cwd); store.init();
+  const unit = store.save({ title: 'Persistir prática', deck: 'Persistência', questions: [
+    { id: 'escolha', type: 'choice', prompt: 'Qual opção está certa?', options: ['Errada', 'Certa'], answer: 1 },
+    { id: 'texto', type: 'text', prompt: 'Explique com suas palavras.', answer: 'Referência para comparação.' }
+  ] });
+  const server = await serve(store, 0), base = `http://127.0.0.1:${server.address().port}`;
+  let w;
+  const open = async () => {
+    w = new JSDOM(fs.readFileSync(new URL('../web/index.html', import.meta.url), 'utf8'), { url: base, runScripts: 'outside-only', pretendToBeVisual: true }).window;
+    w.fetch = (url, opts) => fetch(base + url, opts);
+    w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+    w.HTMLDialogElement.prototype.close = function () { this.open = false; this.dispatchEvent(new w.Event('close')); };
+    await w.eval(`(async () => { ${fs.readFileSync(new URL('../web/app.js', import.meta.url), 'utf8')}\n})()`);
+  };
+  const $ = s => w.document.querySelector(s);
+  const until = async p => { const start = Date.now(); while (!p()) { if (Date.now() - start > 5000) throw new Error('Tempo esgotado: ' + $('#toast').textContent); await new Promise(r => setTimeout(r, 10)); } };
+  await open();
+  t.after(async () => { w.close(); await new Promise(r => server.close(r)); fs.rmSync(cwd, { recursive: true, force: true }); });
+  await until(() => $('.study-card'));
+  $('.study-card').click(); await until(() => $('[data-tab="quiz"]'));
+  $('[data-tab="quiz"]').click();
+  $('#quiz-form input[value="0"]').checked = true; $('#quiz-form textarea').value = 'Minha resposta preservada';
+  $('#quiz-form').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true }));
+  await until(() => $('#quiz-feedback .wrong'));
+  assert.match($('#quiz-feedback').textContent, /Referência: Certa/);
+  assert.match($('#quiz-feedback').textContent, /Compare sua resposta com a referência/);
+  $('[data-action="edit-unit"]').click(); await until(() => $('#editor').open);
+  $('#edit-form').elements.status.value = 'Estudando';
+  $('#edit-form').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true }));
+  await until(() => store.get(unit.id).status === 'Estudando' && !$('#editor').open);
+  w.close(); await open(); await until(() => $('.study-card'));
+  assert.equal($('.study-card').closest('.lane').dataset.status, 'Estudando');
+  $('.study-card').click(); await until(() => $('[data-tab="history"]'));
+  $('[data-tab="history"]').click();
+  assert.match($('#unit-body').textContent, /Minha resposta preservada/);
+  assert.match($('#unit-body').textContent, /Retomar este conceito/);
+  assert.equal(store.events('attempts', unit.id).length, 1);
+  assert.deepEqual(store.events('attempts', unit.id)[0].results.map(r => r.correct), [false, null]);
+});
+
+test('Web DOM: alterações externas atualizam cards sem apagar rascunho do quiz', async t => {
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'recall-web-live-'));
+  const store = new Store(cwd); store.init();
+  const unit = store.save({ title: 'Acompanhar mudanças', deck: 'Ao vivo', questions: [
+    { id: 'texto', type: 'text', prompt: 'Escreva sem perder o rascunho.', answer: 'Referência.' }
+  ], cards: [{ id: 'inicial', front: 'Frente inicial', back: 'Verso inicial' }] });
+  const server = await serve(store, 0), base = `http://127.0.0.1:${server.address().port}`;
+  const dom = new JSDOM(fs.readFileSync(new URL('../web/index.html', import.meta.url), 'utf8'), { url: base, runScripts: 'outside-only', pretendToBeVisual: true });
+  const w = dom.window; w.fetch = (url, opts) => fetch(base + url, opts);
+  w.HTMLDialogElement.prototype.showModal = function () { this.open = true; };
+  w.HTMLDialogElement.prototype.close = function () { this.open = false; this.dispatchEvent(new w.Event('close')); };
+  t.after(async () => { w.close(); await new Promise(r => server.close(r)); fs.rmSync(cwd, { recursive: true, force: true }); });
+  await w.eval(`(async () => { ${fs.readFileSync(new URL('../web/app.js', import.meta.url), 'utf8')}\n})()`);
+  const $ = s => w.document.querySelector(s);
+  const until = async p => { const start = Date.now(); while (!p()) { if (Date.now() - start > 5000) throw new Error('Tempo esgotado: ' + $('#toast').textContent); await new Promise(r => setTimeout(r, 10)); } };
+  await until(() => $('.study-card'));
+  let current = store.get(unit.id);
+  store.save({ status: 'Estudando', cards: [...current.cards, { id: 'externo', front: 'Cartão externo', back: 'Atualizado' }] }, unit.id);
+  await until(() => $('.study-card').closest('.lane').dataset.status === 'Estudando' && $('.study-card').textContent.includes('2 cartões'));
+  $('.study-card').click(); await until(() => $('[data-tab="quiz"]'));
+  $('[data-tab="quiz"]').click(); $('#quiz-form textarea').value = 'Rascunho que não pode ser perdido';
+  current = store.get(unit.id);
+  store.save({ cards: [...current.cards, { id: 'durante-quiz', front: 'Novo cartão', back: 'Sem interromper' }] }, unit.id);
+  await until(() => $('#due-count').textContent === '3');
+  assert.equal($('#quiz-form textarea').value, 'Rascunho que não pode ser perdido');
+  $('[data-tab="cards"]').click();
+  current = store.get(unit.id);
+  store.save({ cards: [...current.cards, { id: 'detalhe', front: 'Cartão no detalhe', back: 'Atualização visível' }] }, unit.id);
+  await until(() => $('#unit-body').textContent.includes('Cartão no detalhe'));
+  assert.equal(w.document.querySelectorAll('#unit-body .content-card').length, 4);
+});

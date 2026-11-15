@@ -242,7 +242,7 @@ recall/tasks/back-12 - Autenticacao.md
 
 Crie a etapa com `--file 'back-12 - Autenticacao.md'`, informe o arquivo no formulário web ou no JSON de importação. Os IDs de aprendizagem e tarefa continuam independentes. Também são aceitas subpastas simétricas.
 
-Ao criar/editar pela CLI ou web, ou iniciar `recall browser`, Recall.md reconhece a correspondência e tenta criar os vínculos. `recall sync` repete a sincronização, inclusive para arquivos criados manualmente. Se a CLI do Backlog.md estiver ausente, a etapa é salva e aparece um aviso; o contexto continua legível. Reexecute `sync` após instalar/configurar a CLI. Não há observador contínuo de arquivos nesta versão; atualize a página para reler alterações externas.
+Ao criar/editar pela CLI ou web, ou iniciar `recall browser`, Recall.md reconhece a correspondência e tenta criar os vínculos. `recall sync` repete a sincronização, inclusive para arquivos criados manualmente. Se a CLI do Backlog.md estiver ausente, a etapa é salva e aparece um aviso; o contexto continua legível. Reexecute `sync` após instalar/configurar a CLI. A web relê os arquivos a cada segundo enquanto visível e ao recuperar o foco, atualizando cards, estados, tentativas e decks sem recarregar a página. Ela não interrompe formulários, uma revisão em andamento nem um quiz com rascunho; nesses casos, o detalhe é atualizado quando for seguro reabri-lo.
 
 O link de retorno é registrado pelo comando oficial:
 
@@ -284,8 +284,12 @@ npm run check
 npm test
 # Ensaio opcional com Backlog.md instalado; sempre usa pasta temporária:
 RECALL_BACKLOG_BIN=/caminho/do/backlog npm test
+# Chrome real, com dados sintéticos temporários:
+node scripts/smoke-web-browser.mjs /caminho/do/chrome
+# O mesmo fluxo contra uma imagem Docker local:
+RECALL_IMAGE=recall-md:local node scripts/smoke-web-browser.mjs /caminho/do/chrome
 ```
 
-Testes incluem controlador da TUI e um ensaio em pseudo-terminal POSIX real (requer Python 3) com redimensionamento, navegação, formulário, quiz, revisão, Ctrl+C/SIGTERM e restauração dos atributos do terminal, além de dois ensaios DOM dos formulários, quiz, autoavaliação e revisão da web, além de persistência, histórico, conflitos, CLI, HTTP e integração idempotente com a CLI real do Backlog.md quando fornecida. O servidor escuta por padrão em `127.0.0.1`; `--host 0.0.0.0` é uma opção explícita para o contêiner, cuja porta deve ser publicada no localhost. Não há autenticação para acesso remoto. A revisão visual/interativa está pendente porque não havia navegador disponível no ambiente de implementação.
+Testes incluem controlador da TUI e um ensaio em pseudo-terminal POSIX real (requer Python 3) com redimensionamento, navegação, formulário, quiz, revisão, Ctrl+C/SIGTERM e restauração dos atributos do terminal, além de quatro ensaios DOM dos formulários, quiz, autoavaliação, persistência, atualização ao vivo e revisão da web. Também cobrem histórico, conflitos, CLI, HTTP e integração idempotente com a CLI real do Backlog.md quando fornecida. O servidor escuta por padrão em `127.0.0.1`; `--host 0.0.0.0` é uma opção explícita para o contêiner, cuja porta deve ser publicada no localhost. Não há autenticação para acesso remoto. O smoke no Chrome valida interação e persistência, inclusive no Docker, mas não substitui revisão visual do layout.
 
 Referência de produto: [Backlog.md](https://github.com/MrLesk/Backlog.md). Recall.md é uma implementação independente, sem importar seus módulos internos.

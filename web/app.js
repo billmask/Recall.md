@@ -1,14 +1,36 @@
 const $ = s => document.querySelector(s);
 const escape = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const enc = encodeURIComponent;
-let state, page = 'board', selected = null, tab = 'material', search = '', deckFilter = '', editing = null, materialType = null, reviewCards = [], reviewIndex = 0, toastTimer;
+let state, page = 'board', selected = null, tab = 'material', search = '', deckFilter = '', editing = null, materialType = null, reviewCards = [], reviewIndex = 0, reviewActive = false, toastTimer, refreshing = false;
 async function api(url, method = 'GET', body) {
   const r = await fetch(url, { method, ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) });
   const data = await r.json(); if (!r.ok) throw new Error(data.error || 'Não foi possível completar a operação.');
   return data;
 }
 function toast(message) { $('#toast').textContent = message; $('#toast').hidden = false; clearTimeout(toastTimer); toastTimer = setTimeout(() => { $('#toast').hidden = true; }, 5000); }
-async function load() { state = await api('/api/state'); $('#project-name').textContent = state.name; $('#due-count').textContent = state.cards.filter(due).length; }
+function applyState(next) { state = next; $('#project-name').textContent = state.name; $('#due-count').textContent = state.cards.filter(due).length; }
+async function load() { applyState(await api('/api/state')); }
+function hasQuizDraft() {
+  const form = $('#quiz-form');
+  return !!form && ([...form.querySelectorAll('textarea')].some(field => field.value) || [...form.querySelectorAll('input[type="radio"]')].some(field => field.checked));
+}
+async function refreshView() {
+  if ($('#detail').open) {
+    if (selected && !$('#editor').open && !$('#material-editor').open && !hasQuizDraft()) await openUnit(selected, true, true);
+    return;
+  }
+  if (page === 'board') renderLanes();
+  else if (page === 'history') history();
+  else if (page === 'review' && !reviewActive) reviewHome();
+}
+async function synchronizeView() {
+  if (refreshing || document.visibilityState === 'hidden' || !state) return;
+  refreshing = true;
+  try {
+    const next = await api('/api/state'), changed = JSON.stringify(next) !== JSON.stringify(state);
+    applyState(next); if (changed) await refreshView();
+  } catch {} finally { refreshing = false; }
+}
 function due(c) { return !c.due || Date.parse(c.due) <= Date.now(); }
 function decks() { return [...new Set([...state.units.map(u => u.deck), ...state.cards.map(c => c.deck)])].sort(); }
 function heading(title, desc, action = '') { return `<div class="page-heading"><div><span class="eyebrow">APRENDA COM INTENÇÃO</span><h1>${title}</h1><p>${desc}</p></div>${action}</div>`; }
@@ -55,9 +77,11 @@ $('#edit-form').addEventListener('submit', async e => {
   catch (err) { form.querySelector('.form-error').textContent = err.message; }
   finally { form.querySelector('button[type="submit"]').disabled = false; }
 });
-async function openUnit(id, keepTab = false) {
+async function openUnit(id, keepTab = false, background = false) {
+  const expectedTab = tab;
   selected = id; if (!keepTab) tab = 'material'; const u = state.units.find(u => u.id === id); if (!u) return;
   let ctx; try { ctx = await api(`/api/units/${enc(id)}/context`); } catch (e) { ctx = { state: 'error', error: e.message }; }
+  if (background && (selected !== id || tab !== expectedTab || hasQuizDraft() || $('#editor').open || $('#material-editor').open)) return;
   $('#detail-content').innerHTML = `<div class="detail-top"><div class="dialog-heading"><div><span class="eyebrow">${escape(u.id)} · ${escape(u.deck)}</span><h2>${escape(u.title)}</h2></div><button class="icon-button close-dialog" aria-label="Fechar">×</button></div><div class="toolbar"><span class="pill">${escape(u.status)}</span><button class="button secondary" data-action="edit-unit">Editar etapa</button></div></div><div class="detail-grid"><div class="detail-main"><div class="tabs">${[['material', 'Material'], ['quiz', 'Quiz'], ['cards', 'Flashcards'], ['history', 'Tentativas']].map(([key, name]) => `<button class="tab ${key === tab ? 'active' : ''}" data-tab="${key}">${name}</button>`).join('')}</div><div id="unit-body"></div></div><aside class="detail-aside"><span class="eyebrow">CONTEXTO DA TAREFA</span>${['linked', 'pending'].includes(ctx.state) ? `<span class="pill">${escape(ctx.id)} · ${escape(ctx.status)}</span><h3>${escape(ctx.title)}</h3><p>${escape(ctx.description || 'Sem descrição na tarefa.')}</p>${ctx.acceptance ? `<details><summary>Critérios de aceite</summary><div class="prose">${escape(ctx.acceptance)}</div></details>` : ''}<p><a href="/api/units/${enc(id)}/source" target="_blank" rel="noopener">Abrir tarefa original ↗</a></p><small>${escape(ctx.file)}</small>${ctx.state === 'pending' ? '<p><button class="button secondary" data-action="sync">Criar links</button></p>' : '<p><small>↔ Vínculo nos dois sentidos</small></p>'}` : `<p>${escape(ctx.error || (ctx.state === 'missing' ? 'A tarefa vinculada não está mais no caminho esperado.' : 'Nenhuma tarefa correspondente no Backlog.md. Esta etapa funciona de forma independente.'))}</p>`}</aside></div>`;
   renderUnitBody(); if (!$('#detail').open) $('#detail').showModal();
 }
@@ -104,7 +128,7 @@ function reviewHome() {
     return `<button class="deck-card" data-review-deck="${escape(d)}"><span class="stat-icon">▱</span><h3>${escape(d)}</h3><small>${cards.length} cartões · ${count} para revisar</small><p class="muted">Revisar deck →</p></button>`;
   }).join('') || '<div class="empty">Seus decks aparecerão quando você criar etapas e flashcards.</div>'}</div>`;
 }
-function startReview(deck) { reviewCards = state.cards.filter(c => c.deck === deck && due(c)); reviewIndex = 0; showReview(); }
+function startReview(deck) { reviewActive = true; reviewCards = state.cards.filter(c => c.deck === deck && due(c)); reviewIndex = 0; showReview(); }
 function showReview() {
   if (reviewIndex >= reviewCards.length) { $('#view').innerHTML = heading('Revisão em dia', 'Os cartões desta sessão foram revisados.') + `<div class="review-box"><div class="flashcard"><span class="eyebrow">ATÉ A PRÓXIMA</span><p>${reviewCards.length ? 'Mais uma etapa para lembrar melhor.' : 'Nenhum cartão pendente neste deck.'}</p><small>Você pode voltar ao material quando precisar.</small></div><button class="button primary" data-page="review">Voltar aos decks</button></div>`; return; }
   const c = reviewCards[reviewIndex];
@@ -118,7 +142,7 @@ document.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
   perform(async () => {
     if (b.classList.contains('close-dialog')) { b.closest('dialog').close(); return; }
-    if (b.dataset.page) { page = b.dataset.page; selected = null; render(); }
+    if (b.dataset.page) { page = b.dataset.page; selected = null; reviewActive = false; render(); }
     if (b.dataset.action === 'create' || b.dataset.createStatus) openEditor(null, b.dataset.createStatus);
     if (b.dataset.unit) await openUnit(b.dataset.unit);
     if (b.dataset.tab) { tab = b.dataset.tab; renderUnitBody(); }
@@ -127,7 +151,7 @@ document.addEventListener('click', e => {
     if (b.dataset.action === 'add-card') openMaterial('card');
     if (b.dataset.action === 'sync') { await api(`/api/units/${enc(selected)}/sync`, 'POST', {}); await load(); await openUnit(selected, true); toast('Links criados.'); }
     if (b.dataset.assess) { await api(`/api/attempts/${enc(b.dataset.assess)}/assess`, 'POST', { question: b.dataset.question, correct: b.dataset.correct === 'true' }); await load(); tab = 'history'; renderUnitBody(); toast('Autoavaliação registrada.'); }
-    if (b.dataset.fromQuestion) { await api(`/api/units/${enc(b.dataset.owner)}/cards`, 'POST', { question: b.dataset.fromQuestion }); await load(); render(); toast('Flashcard criado a partir do gabarito atual.'); }
+    if (b.dataset.fromQuestion) { await api(`/api/units/${enc(b.dataset.owner)}/cards`, 'POST', { question: b.dataset.fromQuestion }); await load(); await openUnit(b.dataset.owner, true); toast('Flashcard criado a partir do gabarito atual.'); }
     if (b.dataset.reviewDeck) startReview(b.dataset.reviewDeck);
     if (b.dataset.rating) { const c = reviewCards[reviewIndex]; b.disabled = true; try { await api(`/api/units/${enc(c.unit)}/reviews`, 'POST', { card: c.id, rating: b.dataset.rating }); reviewIndex++; await load(); showReview(); } finally { b.disabled = false; } }
     if (b.dataset.historyUnit) { await openUnit(b.dataset.historyUnit); tab = 'history'; renderUnitBody(); }
@@ -135,3 +159,6 @@ document.addEventListener('click', e => {
 });
 $('#detail').addEventListener('close', () => { selected = null; render(); });
 await perform(async () => { await load(); render(); });
+setInterval(synchronizeView, 1000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') synchronizeView(); });
+window.addEventListener('focus', synchronizeView);
