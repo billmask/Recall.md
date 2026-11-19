@@ -70,10 +70,19 @@ test('Web DOM: contexto da tarefa, quiz de texto e autoavaliação preservam a t
   $('#quiz-form').dispatchEvent(new w.Event('submit', { bubbles: true, cancelable: true }));
   await until(() => $('[data-assess]'));
   assert.match($('#quiz-feedback').textContent, /A regra decide o comportamento/);
-  $('[data-assess][data-correct="false"]').click(); await until(() => store.events('assessments').length === 1);
+  $('[data-assess][data-correct="true"]').click();
+  await until(() => $('#quiz-feedback [data-result-status]')?.textContent === '✓ Correta · autoavaliação');
+  assert.equal($('[data-tab="quiz"]').classList.contains('active'), true);
+  $('[data-tab="history"]').click();
+  const attempt = $('#unit-body details');
+  attempt.open = true;
+  attempt.querySelector('[data-assess][data-correct="false"]').click();
+  await until(() => attempt.querySelector('[data-result-status]').textContent === '↻ Retomar este conceito · autoavaliação');
+  assert.equal(attempt.open, true);
+  assert.equal(attempt.isConnected, true);
   assert.equal(store.events('attempts', unit.id)[0].results[0].answer, 'Minha explicação');
   assert.equal(store.events('attempts', unit.id)[0].results[0].correct, null);
-  assert.equal(store.events('assessments')[0].correct, false);
+  assert.deepEqual(store.events('assessments').map(entry => [entry.question, entry.correct]), [['regra', true], ['regra', false]]);
 });
 
 test('Web DOM: tentativa, correção e estado sobrevivem a reabrir a página', async t => {

@@ -94,8 +94,19 @@ async function synchronizeView() {
   if (refreshing || document.visibilityState === 'hidden' || !state) return;
   refreshing = true;
   try {
-    const next = await api('/api/state'), changed = JSON.stringify(next) !== JSON.stringify(state);
-    applyState(next); if (changed) await refreshView();
+    const previous = state;
+    const next = await api('/api/state');
+    if (state !== previous) return;
+    const changed = JSON.stringify(next) !== JSON.stringify(previous);
+    applyState(next);
+    if (changed) {
+      const sameAttemptView = $('#detail').open && ['quiz', 'history'].includes(tab)
+        && next.units.find(unit => unit.id === selected)?.version === previous.units.find(unit => unit.id === selected)?.version
+        && JSON.stringify(next.attempts.filter(item => item.unit === selected))
+          === JSON.stringify(previous.attempts.filter(item => item.unit === selected));
+      if (sameAttemptView) refreshAssessmentFeedback();
+      else await refreshView();
+    }
   } catch {} finally { refreshing = false; }
 }
 function due(c) { return !c.due || Date.parse(c.due) <= Date.now(); }
@@ -169,11 +180,47 @@ function renderUnitBody() {
     catch (err) { toast(err.message); } finally { submit.disabled = false; }
   });
 }
+function feedbackStatus(correct, assessed) {
+  const message = correct === true ? '✓ Correta' : correct === false ? '↻ Retomar este conceito' : 'Compare sua resposta com a referência';
+  return message + (assessed ? ' · autoavaliação' : '');
+}
+
+function refreshAssessmentFeedback(attemptId, questionId) {
+  for (const row of document.querySelectorAll('#unit-body [data-result-attempt]')) {
+    const { resultAttempt, resultQuestion } = row.dataset;
+    if (attemptId && (resultAttempt !== attemptId || resultQuestion !== questionId)) continue;
+    const attempt = state.attempts.find(item => item.id === resultAttempt);
+    const result = attempt?.results.find(item => item.question === resultQuestion);
+    if (!result) continue;
+    const assessment = state.assessments.findLast(entry => entry.attempt === attempt.id && entry.question === result.question);
+    const correct = result.correct ?? assessment?.correct;
+    row.classList.toggle('wrong', correct === false);
+    row.querySelector('[data-result-status]').textContent = feedbackStatus(correct, assessment);
+  }
+}
+
+async function assessAnswer(button) {
+  const { assess: attempt, question, correct } = button.dataset;
+  const buttons = button.closest('[data-result-attempt]').querySelectorAll('[data-assess]');
+  if (button.disabled) return;
+  for (const control of buttons) control.disabled = true;
+  try {
+    const saved = await api('/api/attempts/' + enc(attempt) + '/assess', 'POST', { question, correct: correct === 'true' });
+    if (!state.assessments.some(item => item.id === saved.id)) {
+      state = { ...state, assessments: [...state.assessments, saved] };
+    }
+    refreshAssessmentFeedback(attempt, question);
+    toast('Autoavaliação registrada.');
+  } finally {
+    for (const control of buttons) control.disabled = false;
+  }
+}
+
 function feedback(a) {
   return a.results.map(r => {
     const assessed = state.assessments.filter(e => e.attempt === a.id && e.question === r.question).at(-1);
     const correct = r.correct ?? assessed?.correct;
-    return `<div class="result ${correct === false ? 'wrong' : ''}"><strong>${escape(r.prompt)}</strong><p>${correct === true ? '✓ Correta' : correct === false ? '↻ Retomar este conceito' : 'Compare sua resposta com a referência' }${assessed ? ' · autoavaliação' : ''}</p><p>Sua resposta: ${escape(r.options ? r.options[r.answer] : r.answer)}</p><p>Referência: ${escape(r.reference)}</p>${r.explanation ? `<p>${escape(r.explanation)}</p>` : ''}<div class="question-actions">${r.type === 'text' ? `<button class="button secondary" data-assess="${escape(a.id)}" data-question="${escape(r.question)}" data-correct="true">Entendi corretamente</button><button class="button secondary" data-assess="${escape(a.id)}" data-question="${escape(r.question)}" data-correct="false">Preciso retomar</button>` : ''}<button class="button secondary" data-from-question="${escape(r.question)}" data-owner="${escape(a.unit)}">Criar flashcard do gabarito atual</button></div></div>`;
+    return `<div class="result ${correct === false ? 'wrong' : ''}" data-result-attempt="${escape(a.id)}" data-result-question="${escape(r.question)}"><strong>${escape(r.prompt)}</strong><p data-result-status aria-live="polite">${feedbackStatus(correct, assessed)}</p><p>Sua resposta: ${escape(r.options ? r.options[r.answer] : r.answer)}</p><p>Referência: ${escape(r.reference)}</p>${r.explanation ? `<p>${escape(r.explanation)}</p>` : ''}<div class="question-actions">${r.type === 'text' ? `<button class="button secondary" data-assess="${escape(a.id)}" data-question="${escape(r.question)}" data-correct="true">Entendi corretamente</button><button class="button secondary" data-assess="${escape(a.id)}" data-question="${escape(r.question)}" data-correct="false">Preciso retomar</button>` : ''}<button class="button secondary" data-from-question="${escape(r.question)}" data-owner="${escape(a.unit)}">Criar flashcard do gabarito atual</button></div></div>`;
   }).join('');
 }
 function openMaterial(type) {
@@ -222,7 +269,7 @@ document.addEventListener('click', e => {
     if (b.dataset.action === 'add-question') openMaterial('question');
     if (b.dataset.action === 'add-card') openMaterial('card');
     if (b.dataset.action === 'sync') { await api(`/api/units/${enc(selected)}/sync`, 'POST', {}); await load(); await openUnit(selected, true); toast('Links criados.'); }
-    if (b.dataset.assess) { await api(`/api/attempts/${enc(b.dataset.assess)}/assess`, 'POST', { question: b.dataset.question, correct: b.dataset.correct === 'true' }); await load(); tab = 'history'; renderUnitBody(); toast('Autoavaliação registrada.'); }
+    if (b.dataset.assess) await assessAnswer(b);
     if (b.dataset.fromQuestion) { await api(`/api/units/${enc(b.dataset.owner)}/cards`, 'POST', { question: b.dataset.fromQuestion }); await load(); await openUnit(b.dataset.owner, true); toast('Flashcard criado a partir do gabarito atual.'); }
     if (b.dataset.reviewDeck) startReview(b.dataset.reviewDeck);
     if (b.dataset.rating) { const c = reviewCards[reviewIndex]; b.disabled = true; try { await api(`/api/units/${enc(c.unit)}/reviews`, 'POST', { card: c.id, rating: b.dataset.rating }); reviewIndex++; await load(); showReview(); } finally { b.disabled = false; } }
